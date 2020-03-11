@@ -1,6 +1,6 @@
 .venv
 .vscode
 __pycache__
-video.mp4
-avi.avi
-train.mp4
+*.mp4
+*.avi
+*.h264
