@@ -4,7 +4,7 @@ and enable the user to draw rectangles on the video representing bounding boxes.
 
 """
 
-
+import os
 import cv2
 import math
 
@@ -17,22 +17,28 @@ class Player:
     ----------
     video_path : str
         Path of the video file to be loaded. AVI is recommended for optimal performance.
+    window_width: float
+        Width of the window. Useful if loaded video dimensions exceeds screen resolution.
+    radius : int
+        Distance of camera view's center point from from the axis rotation.
+    max_angle : float
+        Degrees of rotation between beginning and end of the video.
+    export_interval : int
+        Number of skipped frames between saved frames when creating the dataset.
+
 
     """
 
-    def __init__(self, video_path):
+    def __init__(self, video_path, window_width=1280.0, radius=1680, max_angle=95.0, export_interval=10):
+        self.window_width = window_width
+        self.radius = radius
+        self.max_angle = max_angle
+        self.export_interval = export_interval
+
         self.window = "window"
-        self.window_width = 1280.0  # Width of window. Useful if loaded video dimensions exceeds screen resolution.
-        self.radius = 1680  # Distance of camera view's center point from from the axis rotation
-        self.max_angle = 95.0  # Degrees of rotation between beginning and end of the video
-        self.frame = None  # Frame to be displayed
-        self.frame_ratio = None  # Width / height ratio of the video
-        self.frame_dims = (None, None)
         self.status = "stay"
         self.tracker_position = 0
         self.rectangles = []
-        self.downX = None  # Mouse down coordinate
-        self.downY = None  # Mouse down coordinate
 
         # Set up Video Window
         cv2.namedWindow(self.window, flags=cv2.WINDOW_GUI_NORMAL + cv2.WINDOW_AUTOSIZE)
@@ -226,3 +232,11 @@ class Player:
 
             except KeyError:
                 print("Invalid Key was pressed")
+
+        def export(self):
+            self.tracker_position = 0
+            os.mkdir('./export')
+
+            while self.tracker_position < self.total_frames:
+                cv2.imwrite("./export/" + "Snap_" + str(self.tracker_position) + ".jpg", self.frame)
+
