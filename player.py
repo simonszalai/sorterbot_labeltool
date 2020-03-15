@@ -38,6 +38,7 @@ class Player:
         self.window = "window"
         self.status = "stay"
         self.tracker_position = 0
+        self.prev_position = None
         self.rectangles = []
 
         # Set up Video Window
@@ -164,33 +165,36 @@ class Player:
                 if self.tracker_position == self.total_frames:
                     self.tracker_position = 0
 
-                # Set video to new frame
-                self.video.set(cv2.CAP_PROP_POS_FRAMES, self.tracker_position)
+                if self.tracker_position != self.prev_position:
+                    # Set video to new frame
+                    self.video.set(cv2.CAP_PROP_POS_FRAMES, self.tracker_position)
 
-                # Grab current frame
-                frame_grab_success, self.frame = self.video.read()
+                    # Grab current frame
+                    frame_grab_success, self.frame = self.video.read()
 
-                # Resize frame
-                self.frame_ratio = self.window_width / self.frame.shape[1]
-                self.frame_dims = (int(self.window_width), int(self.frame.shape[0] * self.frame_ratio))
-                self.frame = cv2.resize(self.frame, self.frame_dims, interpolation=cv2.INTER_AREA)
+                    # Resize frame
+                    self.frame_ratio = self.window_width / self.frame.shape[1]
+                    self.frame_dims = (int(self.window_width), int(self.frame.shape[0] * self.frame_ratio))
+                    self.frame = cv2.resize(self.frame, self.frame_dims, interpolation=cv2.INTER_AREA)
 
-                # Calculate current ractangle positions
-                rectangles = [self.get_new_position(rectangle) for rectangle in self.rectangles]
+                    # Calculate current ractangle positions
+                    rectangles = [self.get_new_position(rectangle) for rectangle in self.rectangles]
 
-                # Draw rectangles
-                for rectangle in rectangles:
-                    cv2.rectangle(
-                        self.frame,
-                        rectangle[0],
-                        rectangle[1],
-                        (0, 255, 255),
-                        2,
-                        8
-                    )
+                    # Draw rectangles
+                    for rectangle in rectangles:
+                        cv2.rectangle(
+                            self.frame,
+                            rectangle[0],
+                            rectangle[1],
+                            (0, 255, 255),
+                            2,
+                            8
+                        )
 
-                # Display grabbed image
-                cv2.imshow(self.window, self.frame)
+                    # Display grabbed image
+                    cv2.imshow(self.window, self.frame)
+
+                self.prev_position = self.tracker_position
 
                 # Change status based on key pressed
                 self.status = {
