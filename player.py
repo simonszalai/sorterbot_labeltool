@@ -239,4 +239,3 @@ class Player:
 
             while self.tracker_position < self.total_frames:
                 cv2.imwrite("./export/" + "Snap_" + str(self.tracker_position) + ".jpg", self.frame)
-
