@@ -39,6 +39,7 @@ class Player:
         self.status = "stay"
         self.tracker_position = 0
         self.prev_position = None
+        self.ractangle_added = False
         self.rectangles = []
 
         # Set up Video Window
@@ -84,6 +85,9 @@ class Player:
             self.downX, self.downY = x, y
         if event == cv2.EVENT_LBUTTONUP:
             self.rectangles.append(((self.downX, self.downY), (x, y), self.tracker_position))
+
+        # Set flag to redraw frame after new rectangle added
+        self.ractangle_added = True
 
     def get_new_position(self, old_rect_points):
         """
@@ -165,7 +169,7 @@ class Player:
                 if self.tracker_position == self.total_frames:
                     self.tracker_position = 0
 
-                if self.tracker_position != self.prev_position:
+                if self.ractangle_added or self.tracker_position != self.prev_position:
                     # Set video to new frame
                     self.video.set(cv2.CAP_PROP_POS_FRAMES, self.tracker_position)
 
@@ -194,6 +198,10 @@ class Player:
                     # Display grabbed image
                     cv2.imshow(self.window, self.frame)
 
+                    # Reset flag
+                    self.ractangle_added = False
+
+                # Save position for comparison in next iteration
                 self.prev_position = self.tracker_position
 
                 # Change status based on key pressed
