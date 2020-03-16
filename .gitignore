@@ -1,6 +1,8 @@
 .venv
 .vscode
 __pycache__
+exports
+videos
 *.mp4
 *.avi
 *.h264

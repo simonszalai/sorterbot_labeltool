@@ -7,6 +7,8 @@ and enable the user to draw rectangles on the video representing bounding boxes.
 import os
 import cv2
 import math
+import json
+from pathlib import Path
 
 
 class Player:
@@ -17,6 +19,8 @@ class Player:
     ----------
     video_path : str
         Path of the video file to be loaded. AVI is recommended for optimal performance.
+    dataset_id : str
+        Id of the current dataset which corresponds to the folder names where the videos and exported data is stored.
     window_width: float
         Width of the window. Useful if loaded video dimensions exceeds screen resolution.
     radius : int
@@ -28,11 +32,13 @@ class Player:
 
     """
 
-    def __init__(self, video_path, window_width=1280.0, radius=1680, max_angle=95.0, export_interval=10):
+    def __init__(self, video_path, dataset_id, window_width=1280.0, radius=1680, max_angle=143, export_interval=9, export_offset=3):
         self.window_width = window_width
         self.radius = radius
         self.max_angle = max_angle
         self.export_interval = export_interval
+        self.export_offset = export_offset
+        self.dataset_id = dataset_id
 
         self.window = "window"
         self.status = "stay"
@@ -58,11 +64,19 @@ class Player:
 
         # Set up trackbar for radius
         cv2.createTrackbar("Radius", self.window, 0, 5000, self.update_radius)
-        cv2.setTrackbarPos("Radius", self.window, 1680)
+        cv2.setTrackbarPos("Radius", self.window, self.radius)
 
         # Set up trackbar for angle
         cv2.createTrackbar("Angle", self.window, 0, 360, self.update_angle)
-        cv2.setTrackbarPos("Angle", self.window, 95)
+        cv2.setTrackbarPos("Angle", self.window, self.max_angle)
+
+        # Set up trackbar for export interval
+        cv2.createTrackbar("Export Interval", self.window, 0, 100, self.update_interval)
+        cv2.setTrackbarPos("Export Interval", self.window, self.export_interval)
+
+        # Set up trackbar for export offset
+        cv2.createTrackbar("Export Offset", self.window, 0, 100, self.update_offset)
+        cv2.setTrackbarPos("Export Offset", self.window, self.export_offset)
 
     # Updater functions for trackbars
     def update_tracker_position(self, new_tracker_position):
@@ -74,6 +88,14 @@ class Player:
 
     def update_angle(self, angle):
         self.max_angle = angle
+        self.rerender = True
+
+    def update_interval(self, export_interval):
+        self.export_interval = export_interval
+        self.rerender = True
+
+    def update_offset(self, export_offset):
+        self.export_offset = export_offset
         self.rerender = True
 
     def onMouseClick(self, event, x, y, flags, param):
@@ -90,7 +112,7 @@ class Player:
         # Set flag to redraw frame after new rectangle added
         self.rerender = True
 
-    def get_new_position(self, old_rect_points):
+    def calc_new_rectangle_position(self, old_rect_points, tracker_position=None, scale=True):
         """
         Calculates current bounding bar positions from current trackbar position, original trackbar position,
         and coordinates of top left and bottom right corners.
@@ -100,21 +122,32 @@ class Player:
         old_rect_points : tuple
             Contains coordinates of top left corner (index 0), cooridnates of bottom right corner (index 1),
             and trackbar position when the box was srawn (index 2).
+        tracker_position : int
+            Tracker position (frame index) for which the rectangle position will be calculated.
+        scale : bool
+            Flag whether or not the rectangle should be scaled to match the resized window. Should be false
+            for exporting since it exports full sized frames
 
         """
 
+        if tracker_position is None:
+            tracker_position = self.tracker_position
+
         # Retrieve frame dimensions
         half_w, half_h = self.video.get(cv2.CAP_PROP_FRAME_WIDTH) / 2, self.video.get(cv2.CAP_PROP_FRAME_HEIGHT) / 2
-        half_w, half_h = self.scale_point((half_w, half_h))  # Account for resized window
+
+        # Account for resized window
+        if scale:
+            half_w, half_h = self.scale_point((half_w, half_h))
 
         # Retrieve rectangle data
         box_w = old_rect_points[1][0] - old_rect_points[0][0]
         box_h = old_rect_points[1][1] - old_rect_points[0][1]
-        old_tracker_position = old_rect_points[2]
+        tracker_position_when_drawn = old_rect_points[2]
 
         # Convert rackbar position to angle and calculate new angle comapred to beginning of video
-        angle_old = self.max_angle * old_tracker_position / self.total_frames
-        angle_new = self.max_angle * self.tracker_position / self.total_frames
+        angle_old = self.max_angle * tracker_position_when_drawn / self.total_frames
+        angle_new = self.max_angle * tracker_position / self.total_frames
 
         # Calculate center point of rectangle to move
         x1 = old_rect_points[0][0] + box_w / 2
@@ -183,7 +216,13 @@ class Player:
                     self.frame = cv2.resize(self.frame, self.frame_dims, interpolation=cv2.INTER_AREA)
 
                     # Calculate current ractangle positions
-                    rectangles = [self.get_new_position(rectangle) for rectangle in self.rectangles]
+                    rectangles = [self.calc_new_rectangle_position(rectangle) for rectangle in self.rectangles]
+
+                    # Hide rectangles out of viewport bounds
+                    rectangles = [rectangle for rectangle in rectangles if self.is_rect_in_bounds(rectangle, self.frame_dims)]
+
+                    # Change color of bounding boxes when it will be exported
+                    bbox_color = (255, 255, 255) if (self.export_offset + self.tracker_position) % self.export_interval == 0 else (0, 255, 255)
 
                     # Draw rectangles
                     for rectangle in rectangles:
@@ -191,7 +230,7 @@ class Player:
                             self.frame,
                             rectangle[0],
                             rectangle[1],
-                            (0, 255, 255),
+                            bbox_color,
                             2,
                             8
                         )
@@ -211,7 +250,7 @@ class Player:
                     ord("w"): "play",
                     ord("a"): "prev_frame",
                     ord("d"): "next_frame",
-                    ord("c"): "snap",
+                    ord("e"): "export",
                     -1: self.status,
                     27: "exit",
                 }[cv2.waitKey(10)]
@@ -234,10 +273,11 @@ class Player:
                     cv2.setTrackbarPos("P", self.window, self.tracker_position)
                     self.status = "stay"
 
-                # if self.status == "snap":
-                #     cv2.imwrite("./" + "Snap_" + str(self.tracker_position) + ".jpg", self.frame)
-                #     print("Snap of Frame", self.tracker_position, "Taken!")
-                #     self.status = "stay"
+                if self.status == "export":
+                    self.status = "stay"
+                    print("Exporting frames...")
+                    exported_frames_count = self.export()
+                    print(f"Successfully exported {exported_frames_count} frames!")
 
                 if self.status == "exit":
                     cv2.destroyWindow("image")
@@ -246,9 +286,50 @@ class Player:
             except KeyError:
                 print("Invalid Key was pressed")
 
-        def export(self):
-            self.tracker_position = 0
-            os.mkdir('./export')
+    def is_rect_in_bounds(self, rectangle, frame_dims):
+        return rectangle[0][0] > 0 and rectangle[0][1] > 0 and rectangle[1][0] < frame_dims[0] and rectangle[1][1] < frame_dims[1]
 
-            while self.tracker_position < self.total_frames:
-                cv2.imwrite("./export/" + "Snap_" + str(self.tracker_position) + ".jpg", self.frame)
+    def export(self):
+        export_path = os.path.join(Path().parent.absolute(), "exports", self.dataset_id)
+        os.makedirs(export_path, exist_ok=True)
+
+        frame_w, frame_h = self.video.get(cv2.CAP_PROP_FRAME_WIDTH), self.video.get(cv2.CAP_PROP_FRAME_HEIGHT)
+
+        exported_frames_count = 0
+        dataset_dicts = []
+        for frame_index in range(int(self.total_frames)):
+            if (self.export_offset + frame_index) % self.export_interval == 0:
+                self.video.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+                frame_grab_success, frame = self.video.read()
+
+                rectangles = [self.calc_new_rectangle_position(rectangle, tracker_position=frame_index) for rectangle in self.rectangles]
+
+                # Filter out bounding boxes that are out of viewport bounds
+                rectangles = [rectangle for rectangle in rectangles if self.is_rect_in_bounds(rectangle, (frame_w, frame_h))]
+
+                file_path = os.path.join(export_path, f"Frame_{frame_index}.jpg")
+
+                dataset_dict = {
+                    "file_name": file_path,
+                    "width": frame_w,
+                    "height": frame_h,
+                    "image_id": f"{self.dataset_id}_{frame_index}",
+                    "annotations": [{
+                        "bbox": [float(rect[0][0]), float(rect[0][1]), float(rect[1][0]), float(rect[1][1])],
+                        "bbox_mode": 0,
+                        "category_id": 0
+                    } for rect in rectangles]
+                }
+                dataset_dicts.append(dataset_dict)
+
+                if frame_grab_success:
+                    cv2.imwrite(file_path, frame)
+                    exported_frames_count += 1
+                    print(f"Successfully exported Frame_{frame_index}.jpg!")
+                else:
+                    raise Exception(f"Frame grab failed at index {frame_index} while exporting.")
+
+        with open(os.path.join(export_path, "annotations.json"), "w") as outfile:
+            json.dump(dataset_dicts, outfile)
+
+        return exported_frames_count
