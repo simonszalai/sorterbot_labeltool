@@ -7,8 +7,8 @@ from storage import Storage
 
 class Main:
     def __init__(self):
-        self.dataset_id = sys.argv[1]
-        self.videos_path = os.path.join(Path().parent.absolute(), "videos", self.dataset_id)
+        self.export_id = sys.argv[1]
+        self.videos_path = os.path.join(Path().parent.absolute(), "videos", self.export_id)
 
         if not os.path.isdir(self.videos_path):
             os.makedirs(self.videos_path, exist_ok=True)
@@ -16,7 +16,7 @@ class Main:
         self.storage = Storage(self.videos_path)
 
         avi_files = [f.path for f in os.scandir(self.videos_path) if os.path.splitext(f.name)[1] == ".avi"]
-        self.player = Player(avi_files[0], dataset_id=self.dataset_id)
+        self.player = Player(avi_files[0], export_id=self.export_id)
         self.player.start()
 
 

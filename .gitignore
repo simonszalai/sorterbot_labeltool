@@ -3,6 +3,7 @@
 __pycache__
 exports
 videos
+datasets
 *.mp4
 *.avi
 *.h264

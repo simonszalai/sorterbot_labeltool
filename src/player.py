@@ -19,7 +19,7 @@ class Player:
     ----------
     video_path : str
         Path of the video file to be loaded. AVI is recommended for optimal performance.
-    dataset_id : str
+    export_id : str
         Id of the current dataset which corresponds to the folder names where the videos and exported data is stored.
     window_width: float
         Width of the window. Useful if loaded video dimensions exceeds screen resolution.
@@ -32,13 +32,13 @@ class Player:
 
     """
 
-    def __init__(self, video_path, dataset_id, window_width=1280.0, radius=1680, max_angle=143, export_interval=9, export_offset=3):
+    def __init__(self, video_path, export_id, window_width=1280.0, radius=1680, max_angle=143, export_interval=9, export_offset=3):
         self.window_width = window_width
         self.radius = radius
         self.max_angle = max_angle
         self.export_interval = export_interval
         self.export_offset = export_offset
-        self.dataset_id = dataset_id
+        self.export_id = export_id
 
         self.window = "window"
         self.status = "stay"
@@ -290,7 +290,7 @@ class Player:
         return rectangle[0][0] > 0 and rectangle[0][1] > 0 and rectangle[1][0] < frame_dims[0] and rectangle[1][1] < frame_dims[1]
 
     def export(self):
-        export_path = os.path.join(Path().parent.absolute(), "exports", self.dataset_id)
+        export_path = os.path.join(Path().parent.absolute(), "exports", self.export_id)
         os.makedirs(export_path, exist_ok=True)
 
         frame_w, frame_h = self.video.get(cv2.CAP_PROP_FRAME_WIDTH), self.video.get(cv2.CAP_PROP_FRAME_HEIGHT)
@@ -307,13 +307,17 @@ class Player:
                 # Filter out bounding boxes that are out of viewport bounds
                 rectangles = [rectangle for rectangle in rectangles if self.is_rect_in_bounds(rectangle, (frame_w, frame_h))]
 
+                # Do not export if there are no rectangles within the viewport
+                if len(rectangles) == 0:
+                    continue
+
                 file_path = os.path.join(export_path, f"Frame_{frame_index}.jpg")
 
                 dataset_dict = {
                     "file_name": file_path,
                     "width": frame_w,
                     "height": frame_h,
-                    "image_id": f"{self.dataset_id}_{frame_index}",
+                    "image_id": f"{self.export_id}_{frame_index}",
                     "annotations": [{
                         "bbox": [float(rect[0][0]), float(rect[0][1]), float(rect[1][0]), float(rect[1][1])],
                         "bbox_mode": 0,
