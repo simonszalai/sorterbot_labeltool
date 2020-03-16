@@ -26,7 +26,6 @@ class Player:
     export_interval : int
         Number of skipped frames between saved frames when creating the dataset.
 
-
     """
 
     def __init__(self, video_path, window_width=1280.0, radius=1680, max_angle=95.0, export_interval=10):
@@ -39,7 +38,7 @@ class Player:
         self.status = "stay"
         self.tracker_position = 0
         self.prev_position = None
-        self.ractangle_added = False
+        self.rerender = False
         self.rectangles = []
 
         # Set up Video Window
@@ -71,9 +70,11 @@ class Player:
 
     def update_radius(self, radius):
         self.radius = radius
+        self.rerender = True
 
     def update_angle(self, angle):
         self.max_angle = angle
+        self.rerender = True
 
     def onMouseClick(self, event, x, y, flags, param):
         """
@@ -87,7 +88,7 @@ class Player:
             self.rectangles.append(((self.downX, self.downY), (x, y), self.tracker_position))
 
         # Set flag to redraw frame after new rectangle added
-        self.ractangle_added = True
+        self.rerender = True
 
     def get_new_position(self, old_rect_points):
         """
@@ -169,7 +170,7 @@ class Player:
                 if self.tracker_position == self.total_frames:
                     self.tracker_position = 0
 
-                if self.ractangle_added or self.tracker_position != self.prev_position:
+                if self.rerender or self.tracker_position != self.prev_position:
                     # Set video to new frame
                     self.video.set(cv2.CAP_PROP_POS_FRAMES, self.tracker_position)
 
@@ -199,7 +200,7 @@ class Player:
                     cv2.imshow(self.window, self.frame)
 
                     # Reset flag
-                    self.ractangle_added = False
+                    self.rerender = False
 
                 # Save position for comparison in next iteration
                 self.prev_position = self.tracker_position
