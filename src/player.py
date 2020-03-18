@@ -50,13 +50,13 @@ class Player:
         self.max_angle = config["max_angle"] if config_found else max_angle
         self.export_interval = config["export_interval"] if config_found else export_interval
         self.export_offset = config["export_offset"] if config_found else export_offset
+        self.rectangles = config["rectangles"] if config_found else []
 
         self.window = video_path
         self.status = "stay"
         self.tracker_position = 0
         self.prev_position = None
         self.rerender = False
-        self.rectangles = []
 
         # Set up Video Window
         cv2.namedWindow(self.window, flags=cv2.WINDOW_GUI_NORMAL + cv2.WINDOW_AUTOSIZE)
@@ -118,7 +118,12 @@ class Player:
         if event == cv2.EVENT_LBUTTONDOWN:
             self.downX, self.downY = x, y
         if event == cv2.EVENT_LBUTTONUP:
-            self.rectangles.append(((self.downX, self.downY), (x, y), self.tracker_position))
+            # Ensure that check if bounding box is in viewport works regardless the order of points drawn
+            left = min(self.downX, x)
+            right = max(self.downX, x)
+            top = min(self.downY, y)
+            bottom = max(self.downY, y)
+            self.rectangles.append(((left, top), (right, bottom), self.tracker_position))
 
         # Set flag to redraw frame after new rectangle added
         self.rerender = True
@@ -301,7 +306,7 @@ class Player:
                     break
 
             except Exception as e:
-                print("Invalid Key was pressed", e)
+                print(e)
 
     def is_rect_in_bounds(self, rectangle, frame_dims):
         return rectangle[0][0] > 0 and rectangle[0][1] > 0 and rectangle[1][0] < frame_dims[0] and rectangle[1][1] < frame_dims[1]
@@ -318,17 +323,19 @@ class Player:
         dataset_dicts = []
         for frame_index in range(int(self.total_frames)):
             if (self.export_offset + frame_index) % self.export_interval == 0:
-                self.video.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
-                frame_grab_success, frame = self.video.read()
-
-                rectangles = [self.calc_new_rectangle_position(rectangle, tracker_position=frame_index) for rectangle in self.rectangles]
-
-                # Filter out bounding boxes that are out of viewport bounds
-                rectangles = [rectangle for rectangle in rectangles if self.is_rect_in_bounds(rectangle, (frame_w, frame_h))]
+                rectangles = []
+                for rectangle in self.rectangles:
+                    new_rect_pos = self.calc_new_rectangle_position(rectangle, tracker_position=frame_index)
+                    # Filter out bounding boxes that are out of viewport bounds
+                    if self.is_rect_in_bounds(new_rect_pos, self.frame_dims):
+                        rectangles.append(new_rect_pos)
 
                 # Do not export if there are no rectangles within the viewport
                 if len(rectangles) == 0:
                     continue
+
+                self.video.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
+                frame_grab_success, frame = self.video.read()
 
                 file_path = os.path.join(export_path, f"{video_name}_{frame_index}.jpg")
 
