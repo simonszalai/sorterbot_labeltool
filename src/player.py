@@ -32,15 +32,26 @@ class Player:
 
     """
 
-    def __init__(self, video_path, export_id, window_width=1280.0, radius=1680, max_angle=143, export_interval=9, export_offset=3):
+    def __init__(self, video_path, export_id, window_width=1280.0, radius=1680.0, max_angle=143.0, export_interval=18, export_offset=3):
+        self.video_path = video_path
         self.window_width = window_width
-        self.radius = radius
-        self.max_angle = max_angle
-        self.export_interval = export_interval
-        self.export_offset = export_offset
         self.export_id = export_id
 
-        self.window = "window"
+        # Load config JSON if it exists
+        self.json_config_path = os.path.join(os.path.dirname(self.video_path), f"{os.path.basename(video_path)}_config.json")
+        try:
+            with open(self.json_config_path) as json_file:
+                config = json.load(json_file)
+                config_found = True
+        except FileNotFoundError:
+            config_found = False
+
+        self.radius = config["radius"] if config_found else radius
+        self.max_angle = config["max_angle"] if config_found else max_angle
+        self.export_interval = config["export_interval"] if config_found else export_interval
+        self.export_offset = config["export_offset"] if config_found else export_offset
+
+        self.window = video_path
         self.status = "stay"
         self.tracker_position = 0
         self.prev_position = None
@@ -64,19 +75,19 @@ class Player:
 
         # Set up trackbar for radius
         cv2.createTrackbar("Radius", self.window, 0, 5000, self.update_radius)
-        cv2.setTrackbarPos("Radius", self.window, self.radius)
+        cv2.setTrackbarPos("Radius", self.window, int(self.radius))
 
         # Set up trackbar for angle
         cv2.createTrackbar("Angle", self.window, 0, 360, self.update_angle)
-        cv2.setTrackbarPos("Angle", self.window, self.max_angle)
+        cv2.setTrackbarPos("Angle", self.window, int(self.max_angle))
 
         # Set up trackbar for export interval
         cv2.createTrackbar("Export Interval", self.window, 0, 100, self.update_interval)
-        cv2.setTrackbarPos("Export Interval", self.window, self.export_interval)
+        cv2.setTrackbarPos("Export Interval", self.window, int(self.export_interval))
 
         # Set up trackbar for export offset
         cv2.createTrackbar("Export Offset", self.window, 0, 100, self.update_offset)
-        cv2.setTrackbarPos("Export Offset", self.window, self.export_offset)
+        cv2.setTrackbarPos("Export Offset", self.window, int(self.export_offset))
 
     # Updater functions for trackbars
     def update_tracker_position(self, new_tracker_position):
@@ -193,6 +204,7 @@ class Player:
             s: stop playback
             a: previous frame
             d: next frame
+            z: undo last rectangle draw
             esc: exit
 
         """
@@ -251,6 +263,7 @@ class Player:
                     ord("a"): "prev_frame",
                     ord("d"): "next_frame",
                     ord("e"): "export",
+                    ord("z"): "remove_last",
                     -1: self.status,
                     27: "exit",
                 }[cv2.waitKey(10)]
@@ -274,17 +287,21 @@ class Player:
                     self.status = "stay"
 
                 if self.status == "export":
-                    self.status = "stay"
                     print("Exporting frames...")
                     exported_frames_count = self.export()
                     print(f"Successfully exported {exported_frames_count} frames!")
+                    self.status = "exit"
+
+                if self.status == "remove_last":
+                    self.rectangles.pop()
+                    self.status = "stay"
 
                 if self.status == "exit":
-                    cv2.destroyWindow("image")
+                    cv2.destroyWindow(self.window)
                     break
 
-            except KeyError:
-                print("Invalid Key was pressed")
+            except Exception as e:
+                print("Invalid Key was pressed", e)
 
     def is_rect_in_bounds(self, rectangle, frame_dims):
         return rectangle[0][0] > 0 and rectangle[0][1] > 0 and rectangle[1][0] < frame_dims[0] and rectangle[1][1] < frame_dims[1]
@@ -294,6 +311,8 @@ class Player:
         os.makedirs(export_path, exist_ok=True)
 
         frame_w, frame_h = self.video.get(cv2.CAP_PROP_FRAME_WIDTH), self.video.get(cv2.CAP_PROP_FRAME_HEIGHT)
+
+        video_name = os.path.basename(self.video_path)
 
         exported_frames_count = 0
         dataset_dicts = []
@@ -311,13 +330,13 @@ class Player:
                 if len(rectangles) == 0:
                     continue
 
-                file_path = os.path.join(export_path, f"Frame_{frame_index}.jpg")
+                file_path = os.path.join(export_path, f"{video_name}_{frame_index}.jpg")
 
                 dataset_dict = {
                     "file_name": file_path,
                     "width": frame_w,
                     "height": frame_h,
-                    "image_id": f"{self.export_id}_{frame_index}",
+                    "image_id": f"{video_name}_{frame_index}",
                     "annotations": [{
                         "bbox": [float(rect[0][0]), float(rect[0][1]), float(rect[1][0]), float(rect[1][1])],
                         "bbox_mode": 0,
@@ -329,11 +348,27 @@ class Player:
                 if frame_grab_success:
                     cv2.imwrite(file_path, frame)
                     exported_frames_count += 1
-                    print(f"Successfully exported Frame_{frame_index}.jpg!")
+                    print(f"Successfully exported {video_name}_{frame_index}.jpg!")
                 else:
                     raise Exception(f"Frame grab failed at index {frame_index} while exporting.")
 
-        with open(os.path.join(export_path, "annotations.json"), "w") as outfile:
+        # Write dataset JSON
+        with open(os.path.join(export_path, f"{video_name}.json"), "w") as outfile:
+            print("Writing JSON dataset file...")
             json.dump(dataset_dicts, outfile)
+            print("JSON dataset write finished!")
+
+        # Write config JSON
+        with open(self.json_config_path, "w") as outfile:
+            print("Writing JSON config file...")
+            config = {
+                "rectangles": self.rectangles,
+                "radius": self.radius,
+                "max_angle": self.max_angle,
+                "export_interval": self.export_interval,
+                "export_offset": self.export_offset
+            }
+            json.dump(config, outfile)
+            print("JSON config write finished!")
 
         return exported_frames_count

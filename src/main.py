@@ -16,8 +16,9 @@ class Main:
         self.storage = Storage(self.videos_path)
 
         avi_files = [f.path for f in os.scandir(self.videos_path) if os.path.splitext(f.name)[1] == ".avi"]
-        self.player = Player(avi_files[0], export_id=self.export_id)
-        self.player.start()
+
+        for avi_file in avi_files:
+            Player(avi_file, export_id=self.export_id).start()
 
 
 if __name__ == "__main__":
