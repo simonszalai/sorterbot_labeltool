@@ -1,5 +1,4 @@
 import os
-import re
 import sys
 import cv2
 import json
@@ -18,46 +17,69 @@ class Verify:
 
     def run(self):
         self.load_json()
-        self.display_images()
+        self.verify_images()
         self.export_dataset()
 
     def load_json(self):
         self.all_data = []
         for export_id in self.export_ids:
-            json_path = os.path.join(Path().parent.absolute(), "exports", export_id, "annotations.json")
-            with open(json_path) as json_file:
-                self.all_data += json.load(json_file)
+            exports_path = os.path.join(Path().parent.absolute(), "exports", export_id)
+            json_paths = [f.path for f in os.scandir(exports_path) if os.path.splitext(f.name)[1] == ".json"]
+            for json_path in json_paths:
+                with open(json_path) as json_file:
+                    self.all_data += json.load(json_file)
 
-    def display_images(self):
-        for img in self.all_data:
-            # Get frame
-            frame = cv2.imread(img["file_name"])
-            frame = cv2.resize(frame, (1280, 720), interpolation=cv2.INTER_AREA)
+    def verify_images(self):
+        i = 0
+        while True:
+            if i == len(self.all_data):
+                break
 
-            # Draw rectangles
-            for annotation in img["annotations"]:
-                bbox = [int(coord) for coord in annotation["bbox"]]
-                top_left = (bbox[0], bbox[1])
-                bottom_right = (bbox[2], bbox[3])
-                cv2.rectangle(
-                    frame,
-                    top_left,
-                    bottom_right,
-                    (0, 255, 255),
-                    2,
-                    8
-                )
+            img = self.all_data[i]
+            key_code = self.display_image(img)
 
-            cv2.imshow("window", frame)
-            key = cv2.waitKey(0)
-
-            # Add to dataset if the pressed key was "+"
-            if key == 43:
+            if key_code == 43:
+                # Add to dataset if the pressed key was "+" and move to next image
                 self.verified_data.append(img)
+                print(f"Image {i} was added to the dataset!")
+                i += 1
+            elif key_code == 45:
+                # Remove last image from verified_data and move back to previous image
+                self.verified_data.pop()
+                print(f"Image {i - 1} was removed from the dataset!")
+                i -= 1
+            else:
+                # Skip image without adding it to the dataset
+                print(f"Image {i} was skipped!")
+                i += 1
+
+    def display_image(self, img):
+        # Get frame
+        frame = cv2.imread(img["file_name"])
+        frame = cv2.resize(frame, (1280, 720), interpolation=cv2.INTER_AREA)
+
+        # Draw rectangles
+        for annotation in img["annotations"]:
+            bbox = [int(coord) for coord in annotation["bbox"]]
+            top_left = (bbox[0], bbox[1])
+            bottom_right = (bbox[2], bbox[3])
+            cv2.rectangle(
+                frame,
+                top_left,
+                bottom_right,
+                (0, 255, 255),
+                2,
+                8
+            )
+
+        cv2.imshow("window", frame)
+        key_code = cv2.waitKey(0)
+
+        return key_code
 
     def export_dataset(self):
-        os.makedirs(self.datasets_path, exist_ok=True)
-        dataset_folder = self.get_dataset_folder()
+        dataset_folder = os.path.join(self.datasets_path, "-".join(self.export_ids))
+        os.makedirs(dataset_folder, exist_ok=True)
 
         with open(os.path.join(dataset_folder, "annotations.json"), "w") as outfile:
             json.dump(self.verified_data, outfile)
@@ -67,36 +89,6 @@ class Verify:
             dest_path = os.path.join(dataset_folder, os.path.basename(img["file_name"]))
             copyfile(img["file_name"], dest_path)
             print(f"Successfully copied to {img['file_name']}!")
-
-    def get_dataset_folder(self):
-        # List subfolders in datasets folder or create it in case it does not exist
-        try:
-            folder_names = [f.name for f in os.scandir(self.datasets_path) if f.is_dir()]
-        except FileNotFoundError:
-            folder_names = []
-            os.mkdir(self.datasets_path)
-            next_folder = os.path.join(self.datasets_path, "1")
-
-        # Nauturally sort folder names
-        def sorted_alphanumeric(data):
-            convert = lambda text: int(text) if text.isdigit() else text.lower()
-            alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)]
-            return sorted(data, key=alphanum_key)
-        folder_names = sorted_alphanumeric(folder_names)
-
-        # Check if there are any folders in datasets and initialize a folder with number 1 if not
-        try:
-            next_folder = os.path.join(self.datasets_path, folder_names[-1])
-        except IndexError:
-            next_folder = os.path.join(self.datasets_path, "1")
-            os.mkdir(next_folder)
-
-        # Check if last folder contains any items and create new folder if it does
-        if len(os.listdir(next_folder)) != 0:
-            next_folder = os.path.join(self.datasets_path, str(int(folder_names[-1]) + 1))
-            os.mkdir(next_folder)
-
-        return next_folder
 
 
 Verify().run()
