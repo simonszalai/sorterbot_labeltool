@@ -135,38 +135,5 @@ class Verify:
 
         print(f"{count_kept} of {count_total} copied to dataset. Kept Ratio: {count_kept / count_total:.2f}%.")
 
-    def generate_json_from_images(self):
-        dataset_folder_name = "-".join(self.export_ids)
-        dataset_folder = os.path.join(self.datasets_path, dataset_folder_name)
-        verified_data = []
-        for root, _, files in os.walk(dataset_folder):
-            for file in files:
-                img = next((item for item in self.all_data if os.path.basename(item["file_name"]) == file), None)
-                if img is not None:
-                    verified_data.append(img)
-
-        os.makedirs(os.path.join(dataset_folder, "train"), exist_ok=True)
-        os.makedirs(os.path.join(dataset_folder, "val"), exist_ok=True)
-
-        dataset_train = []
-        dataset_val = []
-        for img in verified_data:
-            img["file_name"] = os.path.join(dataset_folder_name, os.path.basename(img["file_name"]))
-            if 0.8 > random.random():
-                dataset_train.append(img)
-                dest_path = os.path.join(dataset_folder, "train", os.path.basename(img["file_name"]))
-                copyfile(os.path.join(dataset_folder, os.path.basename(img["file_name"])), dest_path)
-            else:
-                dest_path = os.path.join(dataset_folder, "val", os.path.basename(img["file_name"]))
-                copyfile(os.path.join(dataset_folder, os.path.basename(img["file_name"])), dest_path)
-                dataset_val.append(img)
-
-        with open(os.path.join(dataset_folder, "train", "annotations.json"), "w") as outfile:
-            json.dump(dataset_train, outfile)
-        with open(os.path.join(dataset_folder, "val", "annotations.json"), "w") as outfile:
-            json.dump(dataset_val, outfile)
-
-        self.storage.upload_dataset(dataset_path=dataset_folder, only_json=False)
-
 
 Verify().run()
