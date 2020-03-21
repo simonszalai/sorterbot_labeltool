@@ -38,7 +38,7 @@ class Player:
         self.export_id = export_id
 
         # Load config JSON if it exists
-        self.json_config_path = os.path.join(os.path.dirname(self.video_path), f"{os.path.basename(video_path)}_config.json")
+        self.json_config_path = os.path.join(os.path.dirname(self.video_path), f"{os.path.splitext(os.path.basename(video_path))[0]}.json")
         try:
             with open(self.json_config_path) as json_file:
                 config = json.load(json_file)
