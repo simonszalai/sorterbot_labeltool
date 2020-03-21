@@ -29,6 +29,8 @@ class Player:
         Degrees of rotation between beginning and end of the video.
     export_interval : int
         Number of skipped frames between saved frames when creating the dataset.
+    export_offset : int
+        Number of frames to offset which frames are exported. Useful to avoid exporting blurry images.
 
     """
 
@@ -115,6 +117,7 @@ class Player:
         drawn bounding boxes together with the current trackbar position.
 
         """
+
         if event == cv2.EVENT_LBUTTONDOWN:
             self.downX, self.downY = x, y
         if event == cv2.EVENT_LBUTTONUP:
@@ -309,19 +312,37 @@ class Player:
                 print(e)
 
     def is_rect_in_bounds(self, rectangle, frame_dims):
+        """
+        A function to determine if a given bounding box is within the viewport. If it's not, it should not be displayed or exported.
+
+        Parameters
+        ----------
+        rectangle : tuple
+            Tuple (representing a rectangle) of tuples (representing coordinates of top left and bottom right corners).
+            Conforms to the following pattern: ((left, top), (right, bottom))
+        frame_dims : tuple
+            Representing dimensions of the frame. Conforms to the following pattern: (width, height)
+
+        """
+
         return rectangle[0][0] > 0 and rectangle[0][1] > 0 and rectangle[1][0] < frame_dims[0] and rectangle[1][1] < frame_dims[1]
 
     def export(self):
+        # Construct exports path and create folder if needed
         export_path = os.path.join(Path().parent.absolute(), "exports", self.export_id)
         os.makedirs(export_path, exist_ok=True)
 
+        # Retrieve frame dimensions
         frame_w, frame_h = self.video.get(cv2.CAP_PROP_FRAME_WIDTH), self.video.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
+        # Get video name
         video_name = os.path.basename(self.video_path)
 
-        exported_frames_count = 0
+        # Loop though all the frames
         dataset_dicts = []
+        exported_frames_count = 0
         for frame_index in range(int(self.total_frames)):
+            # Only export a frame when the frame index is multiple of export interval (+offset)
             if (self.export_offset + frame_index) % self.export_interval == 0:
                 rectangles = []
                 for rectangle in self.rectangles:
