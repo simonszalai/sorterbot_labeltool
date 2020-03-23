@@ -131,7 +131,7 @@ class Player:
         # Set flag to redraw frame after new rectangle added
         self.rerender = True
 
-    def calc_new_rectangle_position(self, old_rect_points, tracker_position=None, scale=True):
+    def calc_new_rectangle_position(self, old_rect_points, tracker_position=None):
         """
         Calculates current bounding bar positions from current trackbar position, original trackbar position,
         and coordinates of top left and bottom right corners.
@@ -143,9 +143,11 @@ class Player:
             and trackbar position when the box was srawn (index 2).
         tracker_position : int
             Tracker position (frame index) for which the rectangle position will be calculated.
-        scale : bool
-            Flag whether or not the rectangle should be scaled to match the resized window. Should be false
-            for exporting since it exports full sized frames
+
+        Returns
+        -------
+        new_coords : list (int)
+            List of new coordinates of the rectangle. Conforms to the following pattern: [left, top, right, bottom]
 
         """
 
@@ -154,10 +156,6 @@ class Player:
 
         # Retrieve frame dimensions
         half_w, half_h = self.video.get(cv2.CAP_PROP_FRAME_WIDTH) / 2, self.video.get(cv2.CAP_PROP_FRAME_HEIGHT) / 2
-
-        # Account for resized window
-        if scale:
-            half_w, half_h = self.scale_point((half_w, half_h))
 
         # Retrieve rectangle data
         box_w = old_rect_points[1][0] - old_rect_points[0][0]
@@ -185,24 +183,33 @@ class Player:
         x2 = half_w - math.sin(gamma_new) * polar_radius
         y2 = self.radius + half_h - (math.cos(gamma_new) * polar_radius)
 
-        # Calculate top left and bottom right corners from center, width and heigh
-        return [(int(x2 - box_w / 2), int(y2 - box_h / 2)), (int(x2 + box_w / 2), int(y2 + box_h / 2))]
+        # Calculate top left and bottom right corners from center, width and height
+        new_coords = [(int(x2 - box_w / 2), int(y2 - box_h / 2)), (int(x2 + box_w / 2), int(y2 + box_h / 2))]
 
-    def scale_point(self, point):
+        return new_coords
+
+    def scale_rect(self, rect):
         """
-        Function to account for the potentially resized window.
+        Function to scale up rectangles to original video resolution which were recorded on scaled-down resolution for display.
 
         Parameters
         ----------
-        point : tuple
-            Coordinates of a point to be rescaled.
+        rect : tuple
+            Coordinates of a rectangle to be rescaled. (left, top, right, bottom)
+
+        Returns
+        -------
+        scaled_coords : list (int)
+            List of new coordinates of the rectangle. Conforms to the following pattern: [left, top, right, bottom]
 
         """
 
-        x2 = point[0] * self.frame_dims[0] / self.video.get(cv2.CAP_PROP_FRAME_WIDTH)
-        y2 = point[1] * self.frame_dims[1] / self.video.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        left = rect[0][0] * self.video.get(cv2.CAP_PROP_FRAME_WIDTH) / self.frame_dims[0]
+        right = rect[1][0] * self.video.get(cv2.CAP_PROP_FRAME_WIDTH) / self.frame_dims[0]
+        top = rect[0][1] * self.video.get(cv2.CAP_PROP_FRAME_HEIGHT) / self.frame_dims[1]
+        bottom = rect[1][1] * self.video.get(cv2.CAP_PROP_FRAME_HEIGHT) / self.frame_dims[1]
 
-        return int(x2), int(y2)
+        return int(left), int(top), int(right), int(bottom)
 
     def start(self):
         """
@@ -328,6 +335,19 @@ class Player:
         return rectangle[0][0] > 0 and rectangle[0][1] > 0 and rectangle[1][0] < frame_dims[0] and rectangle[1][1] < frame_dims[1]
 
     def export(self):
+        """
+        This function is responsible for creating a dataset which later can be used for training. It will export frames defined by export_offset and export_interval.
+        Only bounding boxes wholly within the viewport are included in the exported JSON. The grabbed images will be saved to the exports folder.
+        The JSON file containing the annotations will be also saved there. Another JSON file will be saved to the videos folder,
+        so the parameters and rectangles can be loaded if a previously labeled video is opened again.
+
+        Returns
+        -------
+        exported_frames_count : int
+            Number of exported frames.
+
+        """
+
         # Construct exports path and create folder if needed
         export_path = os.path.join(Path().parent.absolute(), "exports", self.export_id)
         os.makedirs(export_path, exist_ok=True)
@@ -344,35 +364,40 @@ class Player:
         for frame_index in range(int(self.total_frames)):
             # Only export a frame when the frame index is multiple of export interval (+offset)
             if (self.export_offset + frame_index) % self.export_interval == 0:
-                rectangles = []
+                rectangles_to_export = []
+                # Loop through all rectangles in the given frame
                 for rectangle in self.rectangles:
+                    # Get positions of rectangles on the current frame
                     new_rect_pos = self.calc_new_rectangle_position(rectangle, tracker_position=frame_index)
                     # Filter out bounding boxes that are out of viewport bounds
                     if self.is_rect_in_bounds(new_rect_pos, self.frame_dims):
-                        rectangles.append(new_rect_pos)
+                        rectangles_to_export.append(new_rect_pos)
 
                 # Do not export if there are no rectangles within the viewport
-                if len(rectangles) == 0:
+                if len(rectangles_to_export) == 0:
                     continue
 
+                # Grab the current frame from the video
                 self.video.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
                 frame_grab_success, frame = self.video.read()
 
+                # Construct file path
                 file_path = os.path.join(export_path, f"{video_name}_{frame_index}.jpg")
 
-                dataset_dict = {
+                # Generate and append dataset dictionary for rectangles to be exported
+                dataset_dicts.append({
                     "file_name": file_path,
                     "width": frame_w,
                     "height": frame_h,
                     "image_id": f"{video_name}_{frame_index}",
                     "annotations": [{
-                        "bbox": [float(rect[0][0]), float(rect[0][1]), float(rect[1][0]), float(rect[1][1])],
+                        "bbox": self.scale_rect(rect),
                         "bbox_mode": 0,
                         "category_id": 0
-                    } for rect in rectangles]
-                }
-                dataset_dicts.append(dataset_dict)
+                    } for rect in rectangles_to_export]
+                })
 
+                # Write grabbed frame to exports folder
                 if frame_grab_success:
                     cv2.imwrite(file_path, frame)
                     exported_frames_count += 1
@@ -380,13 +405,13 @@ class Player:
                 else:
                     raise Exception(f"Frame grab failed at index {frame_index} while exporting.")
 
-        # Write dataset JSON
+        # Write dataset JSON to exports folder
         with open(os.path.join(export_path, f"{video_name}.json"), "w") as outfile:
             print("Writing JSON dataset file...")
             json.dump(dataset_dicts, outfile)
             print("JSON dataset write finished!")
 
-        # Write config JSON
+        # Write config JSON to videos folder to load rectangles and slider values if the same video is reopened later
         with open(self.json_config_path, "w") as outfile:
             print("Writing JSON config file...")
             config = {
