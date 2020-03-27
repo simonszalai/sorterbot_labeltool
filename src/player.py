@@ -34,7 +34,7 @@ class Player:
 
     """
 
-    def __init__(self, video_path, export_id, window_width=1280.0, radius=1680.0, max_angle=143.0, export_interval=18, export_offset=3):
+    def __init__(self, video_path, export_id, window_width=1000.0, radius=1680.0, max_angle=143.0, export_interval=18, export_offset=3):
         self.video_path = video_path
         self.window_width = window_width
         self.export_id = export_id
@@ -62,7 +62,7 @@ class Player:
 
         # Set up Video Window
         cv2.namedWindow(self.window, flags=cv2.WINDOW_GUI_NORMAL + cv2.WINDOW_AUTOSIZE)
-        cv2.moveWindow(self.window, 250, 150)
+        cv2.moveWindow(self.window, 600, 0)
         cv2.setMouseCallback(self.window, self.onMouseClick)
 
         # Create video capture object
@@ -118,6 +118,10 @@ class Player:
 
         """
 
+        category = 0
+        if flags & cv2.EVENT_FLAG_SHIFTKEY:
+            category = 1
+
         if event == cv2.EVENT_LBUTTONDOWN:
             self.downX, self.downY = x, y
         if event == cv2.EVENT_LBUTTONUP:
@@ -126,7 +130,7 @@ class Player:
             right = max(self.downX, x)
             top = min(self.downY, y)
             bottom = max(self.downY, y)
-            self.rectangles.append(((left, top), (right, bottom), self.tracker_position))
+            self.rectangles.append(((left, top), (right, bottom), self.tracker_position, category))
 
         # Set flag to redraw frame after new rectangle added
         self.rerender = True
@@ -147,7 +151,7 @@ class Player:
         Returns
         -------
         new_coords : list (int)
-            List of new coordinates of the rectangle. Conforms to the following pattern: [left, top, right, bottom]
+            List of new coordinates of the rectangle. Conforms to the following pattern: [(left, top), (right, bottom), category]
 
         """
 
@@ -184,7 +188,7 @@ class Player:
         y2 = self.radius + half_h - (math.cos(gamma_new) * polar_radius)
 
         # Calculate top left and bottom right corners from center, width and height
-        new_coords = [(int(x2 - box_w / 2), int(y2 - box_h / 2)), (int(x2 + box_w / 2), int(y2 + box_h / 2))]
+        new_coords = [(int(x2 - box_w / 2), int(y2 - box_h / 2)), (int(x2 + box_w / 2), int(y2 + box_h / 2)), old_rect_points[2], old_rect_points[3]]
 
         return new_coords
 
@@ -249,7 +253,14 @@ class Player:
                     rectangles = [rectangle for rectangle in rectangles if self.is_rect_in_bounds(rectangle, self.frame_dims)]
 
                     # Change color of bounding boxes when it will be exported
-                    bbox_color = (255, 255, 255) if (self.export_offset + self.tracker_position) % self.export_interval == 0 else (0, 255, 255)
+                    def get_bbox_color(category):
+                        if (self.export_offset + self.tracker_position) % self.export_interval == 0:
+                            return (255, 255, 255)
+                        else:
+                            if category == 0:
+                                return (0, 255, 255)
+                            else:
+                                return (0, 0, 255)
 
                     # Draw rectangles
                     for rectangle in rectangles:
@@ -257,7 +268,7 @@ class Player:
                             self.frame,
                             rectangle[0],
                             rectangle[1],
-                            bbox_color,
+                            get_bbox_color(rectangle[3]),
                             2,
                             8
                         )
@@ -279,7 +290,8 @@ class Player:
                     ord("d"): "next_frame",
                     ord("e"): "export",
                     ord("z"): "remove_last",
-                    -1: self.status,
+                    - 1: self.status,
+                    16: self.status,
                     27: "exit",
                 }[cv2.waitKey(10)]
 
@@ -393,7 +405,7 @@ class Player:
                     "annotations": [{
                         "bbox": self.scale_rect(rect),
                         "bbox_mode": 0,
-                        "category_id": 0
+                        "category_id": rect[3]
                     } for rect in rectangles_to_export]
                 })
 
