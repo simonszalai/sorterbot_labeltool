@@ -8,6 +8,7 @@ import os
 import cv2
 import math
 import json
+import concurrent.futures
 from pathlib import Path
 
 
@@ -34,7 +35,7 @@ class Player:
 
     """
 
-    def __init__(self, video_path, export_id, window_width=1000.0, radius=1680.0, max_angle=143.0, export_interval=18, export_offset=3):
+    def __init__(self, video_path, export_id, window_width=1040.0, radius=1000.0, max_angle=120.0, export_interval=18, export_offset=3):
         self.video_path = video_path
         self.window_width = window_width
         self.export_id = export_id
@@ -135,7 +136,7 @@ class Player:
         # Set flag to redraw frame after new rectangle added
         self.rerender = True
 
-    def calc_new_rectangle_position(self, old_rect_points, tracker_position=None):
+    def calc_new_rectangle_position(self, old_rect_points, tracker_position=None, export=False):
         """
         Calculates current bounding bar positions from current trackbar position, original trackbar position,
         and coordinates of top left and bottom right corners.
@@ -159,7 +160,7 @@ class Player:
             tracker_position = self.tracker_position
 
         # Retrieve frame dimensions
-        half_w, half_h = self.video.get(cv2.CAP_PROP_FRAME_WIDTH) / 2, self.video.get(cv2.CAP_PROP_FRAME_HEIGHT) / 2
+        half_w, half_h = self.frame_dims[0] / 2, self.frame_dims[1] / 2
 
         # Retrieve rectangle data
         box_w = old_rect_points[1][0] - old_rect_points[0][0]
@@ -315,8 +316,10 @@ class Player:
 
                 if self.status == "export":
                     print("Exporting frames...")
-                    exported_frames_count = self.export()
-                    print(f"Successfully exported {exported_frames_count} frames!")
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                        executor.submit(self.export)
+                    # exported_frames_count = self.export()
+                    print(f"Exporting frames finished!")
                     self.status = "exit"
 
                 if self.status == "remove_last":

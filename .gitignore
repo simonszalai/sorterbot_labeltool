@@ -8,3 +8,4 @@ datasets
 *.avi
 *.h264
 *.pyc
+.DS_Store

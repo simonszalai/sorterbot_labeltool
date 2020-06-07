@@ -37,6 +37,7 @@ class Storage:
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(objects)) as executor:
             for obj in objects:
                 executor.submit(self.download_and_convert_video, obj, videos_path)
+        executor.shutdown(wait=True)
 
     def download_and_convert_video(self, obj, videos_path):
         """
@@ -79,7 +80,6 @@ class Storage:
                     continue
                 dataset_type = os.path.basename(dataset_path)
                 dataset_id = os.path.basename(os.path.dirname(dataset_path))
-                print(file)
-                print(f"{dataset_type}/{dataset_id}/{file}")
+                print(f"Uploading {dataset_type}/{dataset_id}/{file}")
                 self.datasets_bucket.upload_file(os.path.join(root, file), f"{dataset_id}/{dataset_type}/{file}")
             break  # Walk only the root directory

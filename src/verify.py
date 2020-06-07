@@ -1,6 +1,6 @@
 """
-The Verify module provides a way to manually verify every picture in the dataset. When a higher-end robotic arm is used which is capable of very accure and
-consistent movement, this modue might not be needed, but for a low-end arm, driven with servos, a relatively high number of images might end up blurred
+The Verify module provides a way to manually verify every picture in the dataset. When a higher-end robotic arm is used which is capable of very accurate and
+consistent movement, this module might not be needed, but for a low-end arm, driven with servos, a relatively high number of images might end up blurred
 or the objects out of their bounding boxes due to inconsistent movements of the arm. To avoid these ending up in the final dataset, this module is used.
 It can process multiple export folders at once. The IDs for these folders has to be provided at startup. After all the files in these folder are read in,
 a UI will appear showing the first picture and the generated bounding boxes over the objects. If the picture looks alright, press Num+, and it will be added
@@ -29,7 +29,7 @@ class Verify:
 
     def __init__(self):
         cv2.namedWindow("window", flags=cv2.WINDOW_GUI_NORMAL + cv2.WINDOW_AUTOSIZE)
-        cv2.moveWindow("window", 250, 150)
+        cv2.moveWindow("window", 250, 50)
 
         self.storage = Storage()
         self.export_ids = sys.argv[1].split(",")
@@ -126,7 +126,8 @@ class Verify:
 
         # Get frame
         frame = cv2.imread(img["file_name"])
-        frame = cv2.resize(frame, (1280, 720), interpolation=cv2.INTER_AREA)
+        frame_ratio = frame.shape[0] / frame.shape[1]
+        resized_frame_dims = (1280, int(frame.shape[0] * frame_ratio))
 
         # Draw rectangles
         for annotation in img["annotations"]:
@@ -141,6 +142,8 @@ class Verify:
                 2,
                 8
             )
+
+        frame = cv2.resize(frame, resized_frame_dims, interpolation=cv2.INTER_AREA)
 
         cv2.imshow("window", frame)
         key_code = cv2.waitKey(0)
@@ -169,7 +172,7 @@ class Verify:
         os.makedirs(os.path.join(dataset_path, "train"), exist_ok=True)
         os.makedirs(os.path.join(dataset_path, "val"), exist_ok=True)
 
-        if manual_verification:
+        if not manual_verification:
             # Instead of user input, get verified data from self.all_data by searching for each file already copied to dataset
             verified_data = []
             for root, _, files in os.walk(dataset_path):
@@ -198,14 +201,14 @@ class Verify:
 
         # Write annotations JSON file for train and val datasets and upload dataset
         for data_type in data:
-            self.storage.upload_dataset(dataset_path=os.path.join(dataset_path, data_type), only_json=manual_verification)
+            self.storage.upload_dataset(dataset_path=os.path.join(dataset_path, data_type), only_json=not manual_verification)
             with open(os.path.join(dataset_path, data_type, "annotations.json"), "w") as outfile:
                 json.dump(data[data_type], outfile)
 
         count_kept = len(data["train"]) + len(data["val"])
         count_total = len(self.all_data)
 
-        print(f"{count_kept} of {count_total} copied to dataset. Kept Ratio: {count_kept / count_total:.2f}%.")
+        print(f"{count_kept} of {count_total} copied to dataset. Kept Ratio: {count_kept / count_total:.2f}.")
 
 
 Verify().run()
