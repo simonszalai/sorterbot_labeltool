@@ -5,5 +5,7 @@ This repoistory contains two tools. One is a video player, which opens a video r
 
 The second tool enables to user to verify every picture created by the first tool, and discard the ones that are blurry or the bounding boxes are not correctly placed.
 
+The DeepNote notebook to train the Detectron2 network on teh created dataset acn be found [here](https://beta.deepnote.com/project/c8dd74da-b3cc-415c-a801-364e8433357a).
+
 ### Usage
 Instructions coming soon.
