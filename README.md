@@ -13,7 +13,7 @@ To start the tool, from the root folder of the repository:
   ```
   python3 src/main.py [DATASET_NR]
   ```
-  where [DATASET_NR] is the folder name where the dataset is saved, typically an integer.
+   where [DATASET_NR] is the folder name where the dataset is saved, typically an integer.
 1. Set the radius and angle sliders to an approximated value. Radius represents the distance between the rotating axis of the robot’s base and the center of the camera’s field of view measured in pixels, while the angle represents the angle between the radiuses in the most counter-clockwise and the most clockwise positions measured in degrees.
 1. Draw bounding boxes around items, draw bounding boxes around containers while pressing shift.
 1. The following keys are available:
@@ -33,6 +33,6 @@ To start the tool, from the root folder of the repository:
   ```
   python3 src/verify.py [DATASET_NR]
   ```
-  where [DATASET_NR] is the folder name where the dataset is saved, typically an integer.
+   where [DATASET_NR] is the folder name where the dataset is saved, typically an integer.
 1. This tool will display every image in the dataset with the bounding boxes. Press `+` to keep an image, press any button except `+` and `-` to skip an image, and if you erroneously added an image to the dataset, you can remove it by pressing `-`. You verify what is happening in the command line where you started the tool.
 1. After you verified the dataset, it will be automatically uploaded to S3.
